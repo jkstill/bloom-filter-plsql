@@ -14,6 +14,8 @@ technique, not a library to depend on.
 | `bf-pkg.sql` | The same logic promoted into a reusable `bloom_filter` package (spec + body), with debug output commented out and getters/setters for configuration. This is the version meant to be called from other code. |
 | `bf-test.sql` | A driver script that configures `bloom_filter`, loads a set of integers and names into it, and checks membership of known and unknown values. |
 | `bloom-filter-sizing.py` | Standalone helper (no dependency on the SQL) that computes the optimal bit-vector size `m` and hash count `k` for a target item count `n` and false-positive rate `p`. |
+| `bloom-filter-simple.pl` | Standalone simple demo of a bloom filter in Perl, for understanding the algorithm without the PL/SQL/BLOB complexity. |
+| `bloom-filter-simple.py` | Standalone simple demo of a bloom filter in Python, for understanding the algorithm without the PL/SQL/BLOB complexity. |
 
 ## What a Bloom filter is
 
