@@ -56,7 +56,8 @@ nologging;
 -- -----------------------------------------------------------------------------
 prompt Populating bloom_demo_clients with 1,000,000 rows - please wait...
 
-insert /*+ append */ into bloom_demo_clients (
+insert --+ append 
+into bloom_demo_clients (
    id,
    client_name,
    junk_col_01, junk_col_02, junk_col_03, junk_col_04, junk_col_05,
@@ -289,7 +290,7 @@ begin
    dbms_output.put_line('  Table queries executed : ' || to_char(v_naive_queries,   '999,999'));
    dbms_output.put_line('  Found in table         : ' || to_char(v_naive_found,     '999,999'));
    dbms_output.put_line('  Not found in table     : ' || to_char(v_naive_not_found, '999,999'));
-   dbms_output.put_line('  Elapsed time           : ' || to_char(v_naive_ms,        '999,999') || ' ms');
+   dbms_output.put_line('  Elapsed time           : ' || to_char(v_naive_ms,        '999,999,999') || ' ms');
    dbms_output.put_line('');
    dbms_output.put_line('Filter-gated approach:');
    dbms_output.put_line('  Table queries executed : ' || to_char(v_filter_queries,   '999,999'));
@@ -297,7 +298,7 @@ begin
    dbms_output.put_line('  Found in table         : ' || to_char(v_filter_found,     '999,999'));
    dbms_output.put_line('  Not found in table     : ' || to_char(v_filter_not_found, '999,999'));
    dbms_output.put_line('  False positives        : ' || to_char(v_false_positives,  '999,999'));
-   dbms_output.put_line('  Elapsed time           : ' || to_char(v_filter_ms,        '999,999') || ' ms');
+   dbms_output.put_line('  Elapsed time           : ' || to_char(v_filter_ms,        '999,999,999') || ' ms');
    dbms_output.put_line('');
    dbms_output.put_line('Comparison:');
    dbms_output.put_line('  Query reduction        : ' ||
