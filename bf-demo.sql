@@ -5,7 +5,7 @@
 -- lookup against a poorly constructed table (no useful index, wide rows).
 --
 -- Flow:
---   1. Create and populate a wide, unindexed table with 1 million rows
+--   1. Create and populate a wide, unindexed table with 20,000 rows
 --   2. Populate the Bloom filter from existing client_names
 --   3. Generate an incoming batch with a variable new/seen ratio
 --   4. Run naive approach (query table for every value)
@@ -50,11 +50,11 @@ nologging;
 -- Full table scan is the only access path available
 
 -- -----------------------------------------------------------------------------
--- 2. Populate with 1 million rows
---    client_name values are CLIENT_000001 .. CLIENT_1000000
+-- 2. Populate with 20,000 rows
+--    client_name values are CLIENT_000001 .. CLIENT_020000
 --    All other columns are random noise to widen the rows
 -- -----------------------------------------------------------------------------
-prompt Populating bloom_demo_clients with 1,000,000 rows - please wait...
+prompt Populating bloom_demo_clients with 20,000 rows - please wait...
 
 insert --+ append 
 into bloom_demo_clients (
@@ -85,12 +85,12 @@ select
    dbms_random.value(1, 1000000),
    sysdate - dbms_random.value(0, 3650)
 from dual
-connect by level <= 1000000;
+connect by level <= 20000;
 
 commit;
 
 -- Gather stats so the optimizer knows what it's dealing with
-exec dbms_stats.gather_table_stats(user, 'BLOOM_DEMO_CLIENTS', estimate_percent => 10);
+exec dbms_stats.gather_table_stats(user, 'BLOOM_DEMO_CLIENTS', estimate_percent => 100);
 
 prompt Table populated and stats gathered.
 prompt
@@ -110,11 +110,11 @@ declare
 
    -- -----------------------------------------------------------------------
    -- Bloom filter sizing
-   -- For 1M elements at 1% false positive rate:
-   --   m = -n * ln(p) / ln(2)^2  =  9,585,059 bits
-   --   k = (m/n) * ln(2)         =  ~7 hashes
+   -- For 20,000 elements at 1% false positive rate (bloom-filter-sizing.py -n 20000 -p 0.01):
+   --   m = -n * ln(p) / ln(2)^2  =  191,702 bits
+   --   k = (m/n) * ln(2)         =  7 hashes
    -- -----------------------------------------------------------------------
-   c_vector_size     constant pls_integer := 9585059;
+   c_vector_size     constant pls_integer := 191702;
    c_num_hashes      constant pls_integer := 7;
 
    -- -----------------------------------------------------------------------
@@ -194,8 +194,8 @@ begin
 
    -- -----------------------------------------------------------------------
    -- Step 3: Generate the incoming batch
-   --   NEW values    : CLIENT_1000001 and above (guaranteed not in table)
-   --   KNOWN values  : CLIENT_000001 .. CLIENT_1000000 (guaranteed in table)
+   --   NEW values    : CLIENT_020001 and above (guaranteed not in table)
+   --   KNOWN values  : CLIENT_000001 .. CLIENT_020000 (guaranteed in table)
    -- -----------------------------------------------------------------------
    v_new_count  := round(c_batch_size * c_new_pct / 100);
    v_seen_count := c_batch_size - v_new_count;
@@ -205,14 +205,14 @@ begin
    dbms_output.put_line('  Known (in table)   : ' || to_char(v_seen_count, '999,999'));
    dbms_output.put_line('');
 
-   -- new values: CLIENT_1000001 onwards
+   -- new values: CLIENT_020001 onwards
    for i in 1..v_new_count loop
-      v_batch(i) := 'CLIENT_' || lpad(1000000 + i, 6, '0');
+      v_batch(i) := 'CLIENT_' || lpad(20000 + i, 6, '0');
    end loop;
 
-   -- known values: random selection from CLIENT_000001..CLIENT_1000000
+   -- known values: random selection from CLIENT_000001..CLIENT_020000
    for i in 1..v_seen_count loop
-      v_client_num := trunc(dbms_random.value(1, 1000001));
+      v_client_num := trunc(dbms_random.value(1, 20001));
       v_batch(v_new_count + i) := 'CLIENT_' || lpad(v_client_num, 6, '0');
    end loop;
 
@@ -290,7 +290,7 @@ begin
    dbms_output.put_line('  Table queries executed : ' || to_char(v_naive_queries,   '999,999'));
    dbms_output.put_line('  Found in table         : ' || to_char(v_naive_found,     '999,999'));
    dbms_output.put_line('  Not found in table     : ' || to_char(v_naive_not_found, '999,999'));
-   dbms_output.put_line('  Elapsed time           : ' || to_char(v_naive_ms,        '999,999,999') || ' ms');
+   dbms_output.put_line('  Elapsed time           : ' || to_char(v_naive_ms,        '999,999,999,999') || ' ms');
    dbms_output.put_line('');
    dbms_output.put_line('Filter-gated approach:');
    dbms_output.put_line('  Table queries executed : ' || to_char(v_filter_queries,   '999,999'));
@@ -298,7 +298,7 @@ begin
    dbms_output.put_line('  Found in table         : ' || to_char(v_filter_found,     '999,999'));
    dbms_output.put_line('  Not found in table     : ' || to_char(v_filter_not_found, '999,999'));
    dbms_output.put_line('  False positives        : ' || to_char(v_false_positives,  '999,999'));
-   dbms_output.put_line('  Elapsed time           : ' || to_char(v_filter_ms,        '999,999,999') || ' ms');
+   dbms_output.put_line('  Elapsed time           : ' || to_char(v_filter_ms,        '999,999,999,999') || ' ms');
    dbms_output.put_line('');
    dbms_output.put_line('Comparison:');
    dbms_output.put_line('  Query reduction        : ' ||

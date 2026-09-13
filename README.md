@@ -12,10 +12,19 @@ technique, not a library to depend on.
 |---|---|
 | `bf-proto.sql` | Anonymous-block **prototype**. All logic (init/get/set/add) lives as nested procedures/functions inside one `declare` block, with debug `dbms_output` calls left in. This is the "figure it out" version. |
 | `bf-pkg.sql` | The same logic promoted into a reusable `bloom_filter` package (spec + body), with debug output commented out and getters/setters for configuration. This is the version meant to be called from other code. |
-| `bf-test.sql` | A driver script that configures `bloom_filter`, loads a set of integers and names into it, and checks membership of known and unknown values. |
+| `bf-test.sql` | A driver script that configures `bloom_filter`, loads a set of integers and names into it, and prints membership results for known and unknown values, for a human to read. |
+| `bf-verify.sql` | An automated test: loads a set of values into `bloom_filter`, then asserts every one of them comes back "probably in the set." Any miss raises an error and fails the script, since a Bloom filter must never produce a false negative. Prints `PASS: N/N ...` on success. |
+| `bf-demo.sql` | A larger, timed demo: builds a 20,000-row unindexed table, populates a Bloom filter from it, then runs an incoming batch of lookups two ways — naive (query the table every time) vs. filter-gated (skip the query when the filter says "definitely not present") — and reports the query/time reduction and observed false-positive rate. |
 | `bloom-filter-sizing.py` | Standalone helper (no dependency on the SQL) that computes the optimal bit-vector size `m` and hash count `k` for a target item count `n` and false-positive rate `p`. |
 | `bloom-filter-simple.pl` | Standalone simple demo of a bloom filter in Perl, for understanding the algorithm without the PL/SQL/BLOB complexity. |
 | `bloom-filter-simple.py` | Standalone simple demo of a bloom filter in Python, for understanding the algorithm without the PL/SQL/BLOB complexity. |
+
+`bloom-filter-simple.pl` and `bloom-filter-simple.py` teach the concept
+with a plain array of bits and MD5 (`md5("item-0")`, `md5("item-1")`, ...)
+as a cheap way to get multiple hash values. They're intentionally not a
+port of `bloom_filter`'s SHA-256-slicing approach (see "Hashing" below)
+— read them to understand *what* a Bloom filter does, not to predict the
+exact bits `bloom_filter` will set for the same input.
 
 ## What a Bloom filter is
 
@@ -44,8 +53,12 @@ and individual bits within a byte are tested/set with `bitand`/`bit_or`.
   to 32,767 bytes at a time (`dbms_lob.writeappend`) to stay under
   RAW/literal size limits.
 - `get_bit(vector_bits, bit_index)` computes which byte holds a given
-  1-based bit index (`byte_index := (bit_index-1)/8 + 1`), reads that
+  1-based bit index (`byte_index := trunc((bit_index-1)/8) + 1`), reads that
   single byte, and tests the relevant bit with `bitand(byte, 2^bit_position)`.
+  The `trunc` matters: PL/SQL rounds (rather than truncates) a fractional
+  value on assignment to a `PLS_INTEGER`, so plain `/` here would round
+  some `bit_index` values up to the wrong byte — and, at the top of the
+  vector, up to one byte past the BLOB's actual allocated length.
 - `set_bit(vector_bits, bit_index)` reads the same byte, OR's in a mask for
   the target bit (`utl_raw.bit_or`), and writes the byte back.
 
@@ -100,28 +113,34 @@ m = ceil(-n * ln(p) / ln(2)^2)
 k = round((m / n) * ln(2))
 ```
 
-Running it confirms the constants hardcoded in `bf-test.sql`:
+Running it confirms the constants each script hardcodes for its own
+target `n`, e.g.:
 
 ```
 optimal_params(10_000_000, 0.01) -> (95850584, 7)
+optimal_params(20_000, 0.01)     -> (191702, 7)
 ```
 
-`bf-test.sql` calls `set_vector_size(95850584)` and `set_num_hashes(7)` —
-i.e. it's sized for ~10 million items at a 1% false-positive rate, even
-though the test only loads 32 values. This is illustrative of workflow
-(size it for your real expected `n`, not your test data) rather than a
-tuned-for-this-test value.
+`bf-test.sql` actually calls `set_vector_size(1000000)` and
+`set_num_hashes(7)` — a round, easy-to-read vector size rather than the
+value `optimal_params` would pick for its 32 test values, with a
+commented-out `set_vector_size(95850584)` line showing the
+10M-items/1%-false-positive sizing for comparison. `bf-demo.sql` sizes
+for its actual 20,000-row table (`set_vector_size(191702)`,
+`set_num_hashes(7)`) using the formula above.
 
-## Running the test
+## Running the tests / demos
 
 ```sql
 SQL> @bf-pkg.sql
-SQL> @bf-test.sql
+SQL> @bf-test.sql     -- eyeball demo: prints membership results
+SQL> @bf-verify.sql   -- automated test: asserts positive results, PASS/FAIL
+SQL> @bf-demo.sql     -- timed demo: builds a table, compares naive vs. filter-gated lookups
 ```
 
 `bf-test.sql`:
 
-1. Configures the filter for 10M items / 1% false-positive rate.
+1. Configures the filter with `vector_size => 1,000,000`, `num_hashes => 7`.
 2. Adds 24 primes and 8 names (`bob`, `carol`, `dave`, `eve`, `frank`,
    `grace`, `heidi`, `ivan`) to the filter.
 3. Checks a mix of numbers/names that were and weren't added, printing
@@ -130,6 +149,18 @@ SQL> @bf-test.sql
    values that weren't added should almost always report "definitely NOT"
    (a false positive is possible but, at this size/hash-count, extremely
    unlikely for a handful of lookups).
+
+`bf-verify.sql` loads the same kind of small value set, then checks
+every added value programmatically instead of leaving that to a human:
+it raises an error and fails on the first value that doesn't come back
+"probably in the set" (which should never happen), and otherwise prints
+`PASS: N/N positive membership checks succeeded.`
+
+`bf-demo.sql` requires a schema you can create objects in — it drops
+and recreates a `bloom_demo_clients` table. See the "Demo" description
+in the Files table above for what it measures; adjust `c_batch_size`
+and `c_new_pct` at the top of its `declare` block to try other batch
+sizes or new/known ratios.
 
 ## Requirements
 

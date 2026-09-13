@@ -1,12 +1,15 @@
 
 -- plsql bloom filter prototype
 
+set serveroutput on size unlimited
+
 declare
 
 	vector_size pls_integer := 1000000;
 	num_hashes pls_integer := 5;
 	vector_bits blob;
 
+  	-- prepare a 32k character raw string of zeroes
 	v_zero_str  raw(32767) := utl_raw.copies(hextoraw('00'), 32767);
 	v_chunk_len number := 32767;   -- chunk size (<= 32,767)
 
@@ -14,12 +17,10 @@ declare
 	is
 		v_remaining number;
 	begin
-		-- 1. create a temporary blob
+		-- create a temporary blob
   		dbms_lob.createtemporary(vector_bits, true, dbms_lob.call);
-  		-- 2. prepare a 32,000 character string of zeroes
-  		--v_zero_str := lpad('0', v_chunk_len, '0');
 
-  		-- 3. append in chunks to exceed varchar2/literal limitations
+  		-- append in chunks to avoid varchar2/literal limitations
   		v_remaining := ceil(vector_size / 8);
   		while v_remaining > 0 loop
     		if v_remaining >= v_chunk_len then
@@ -34,7 +35,7 @@ declare
 	end;
 
 	function get_bit (vector_bits in blob, bit_index in pls_integer) return boolean is
-		byte_index pls_integer := (bit_index - 1) / 8 + 1;
+		byte_index pls_integer := trunc((bit_index - 1) / 8) + 1;
 		bit_position pls_integer := mod(bit_index - 1, 8);
 		byte_value raw(1);
 		l_amount pls_integer := 1;
@@ -44,7 +45,7 @@ declare
 	end;
 	
 	procedure set_bit (vector_bits in out blob, bit_index in pls_integer) is
-		byte_index   pls_integer := (bit_index - 1) / 8 + 1;
+		byte_index   pls_integer := trunc((bit_index - 1) / 8) + 1;
 		bit_position pls_integer := mod(bit_index - 1, 8);
 		byte_value   raw(1);
 		mask         raw(4);  -- 4 bytes from cast_from_binary_integer
@@ -63,7 +64,7 @@ declare
 	begin
 
 		l_hash := dbms_crypto.hash(utl_raw.cast_to_raw(p_value), dbms_crypto.hash_sh256);
-		-- slice 4 x 4-byte chunks from the 16-byte MD5
+		-- slice num_hashes x 4-byte chunks from the 32-byte SHA-256 digest
 		dbms_output.put_line('Hash: ' || rawtohex(l_hash));	
 
 		for i in 0..num_hashes-1 loop
@@ -84,7 +85,7 @@ declare
 	begin
 
 		l_hash := dbms_crypto.hash(utl_raw.cast_to_raw(p_value), dbms_crypto.hash_sh256);
-		-- slice 4 x 4-byte chunks from the 16-byte MD5
+		-- slice num_hashes x 4-byte chunks from the 32-byte SHA-256 digest
 		dbms_output.put_line('Hash: ' || rawtohex(l_hash));	
 
 		for i in 0..num_hashes-1 loop
@@ -106,7 +107,7 @@ declare
 	begin
 		
 		l_hash := dbms_crypto.hash(utl_raw.cast_to_raw(p_value), dbms_crypto.hash_sh256);
-		-- slice 4 x 4-byte chunks from the 16-byte MD5
+		-- slice num_hashes x 4-byte chunks from the 32-byte SHA-256 digest
 		for i in 0..num_hashes-1 loop
 			l_slice := bitand(utl_raw.cast_to_binary_integer(utl_raw.substr(l_hash, i*4+1, 4)), 2147483647);
 			l_bit_index := mod(l_slice, vector_size) + 1;  -- 1-based
@@ -127,7 +128,7 @@ declare
 	begin
 		
 		l_hash := dbms_crypto.hash(utl_raw.cast_to_raw(p_value), dbms_crypto.hash_sh256);
-		-- slice 4 x 4-byte chunks from the 16-byte MD5
+		-- slice num_hashes x 4-byte chunks from the 32-byte SHA-256 digest
 		for i in 0..num_hashes-1 loop
 			l_slice := bitand(utl_raw.cast_to_binary_integer(utl_raw.substr(l_hash, i*4+1, 4)), 2147483647);
 			l_bit_index := mod(l_slice, vector_size) + 1;  -- 1-based
