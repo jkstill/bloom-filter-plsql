@@ -1,12 +1,15 @@
 
 -- plsql bloom filter prototype
 
+set serveroutput on size unlimited
+
 declare
 
 	vector_size pls_integer := 1000000;
 	num_hashes pls_integer := 5;
 	vector_bits blob;
 
+  	-- prepare a 32k character raw string of zeroes
 	v_zero_str  raw(32767) := utl_raw.copies(hextoraw('00'), 32767);
 	v_chunk_len number := 32767;   -- chunk size (<= 32,767)
 
@@ -14,12 +17,10 @@ declare
 	is
 		v_remaining number;
 	begin
-		-- 1. create a temporary blob
+		-- create a temporary blob
   		dbms_lob.createtemporary(vector_bits, true, dbms_lob.call);
-  		-- 2. prepare a 32,000 character string of zeroes
-  		--v_zero_str := lpad('0', v_chunk_len, '0');
 
-  		-- 3. append in chunks to exceed varchar2/literal limitations
+  		-- append in chunks to avoid varchar2/literal limitations
   		v_remaining := ceil(vector_size / 8);
   		while v_remaining > 0 loop
     		if v_remaining >= v_chunk_len then
