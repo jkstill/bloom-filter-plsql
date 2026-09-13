@@ -21,7 +21,6 @@ sub new {
 sub add {
     my ($self, $item) = @_;
     for my $i (0 .. $self->{num_hashes} - 1) {
-		 # Gemini used a simple hash function here, which is not necessary as Digeest::MD5 is part of the base Perl distribution. So we can use it directly.
 		 my $index = md5_hex("$item-$i");
 		 $index = hex(substr($index, 0, 8)) % $self->{size};
 		 $self->{bit_array}->[$index] = 1;
