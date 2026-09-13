@@ -71,7 +71,7 @@ create or replace package body bloom_filter is
 	end;
 
 	function get_bit (vector_bits in blob, bit_index in pls_integer) return boolean is
-		byte_index pls_integer := (bit_index - 1) / 8 + 1;
+		byte_index pls_integer := trunc((bit_index - 1) / 8) + 1;
 		bit_position pls_integer := mod(bit_index - 1, 8);
 		byte_value raw(1);
 		l_amount pls_integer := 1;
@@ -81,7 +81,7 @@ create or replace package body bloom_filter is
 	end;
 	
 	procedure set_bit (vector_bits in out blob, bit_index in pls_integer) is
-		byte_index   pls_integer := (bit_index - 1) / 8 + 1;
+		byte_index   pls_integer := trunc((bit_index - 1) / 8) + 1;
 		bit_position pls_integer := mod(bit_index - 1, 8);
 		byte_value   raw(1);
 		mask         raw(4);  -- 4 bytes from cast_from_binary_integer
@@ -100,7 +100,7 @@ create or replace package body bloom_filter is
 	begin
 
 		l_hash := dbms_crypto.hash(utl_raw.cast_to_raw(p_value), dbms_crypto.hash_sh256);
-		-- slice 4 x 4-byte chunks from the 16-byte MD5
+		-- slice num_hashes x 4-byte chunks from the 32-byte SHA-256 digest
 		--dbms_output.put_line('Hash: ' || rawtohex(l_hash));	
 
 		for i in 0..num_hashes-1 loop
@@ -121,7 +121,7 @@ create or replace package body bloom_filter is
 	begin
 
 		l_hash := dbms_crypto.hash(utl_raw.cast_to_raw(p_value), dbms_crypto.hash_sh256);
-		-- slice 4 x 4-byte chunks from the 16-byte MD5
+		-- slice num_hashes x 4-byte chunks from the 32-byte SHA-256 digest
 		--dbms_output.put_line('Hash: ' || rawtohex(l_hash));	
 
 		for i in 0..num_hashes-1 loop
@@ -143,7 +143,7 @@ create or replace package body bloom_filter is
 	begin
 		
 		l_hash := dbms_crypto.hash(utl_raw.cast_to_raw(p_value), dbms_crypto.hash_sh256);
-		-- slice 4 x 4-byte chunks from the 16-byte MD5
+		-- slice num_hashes x 4-byte chunks from the 32-byte SHA-256 digest
 		for i in 0..num_hashes-1 loop
 			l_slice := bitand(utl_raw.cast_to_binary_integer(utl_raw.substr(l_hash, i*4+1, 4)), 2147483647);
 			l_bit_index := mod(l_slice, vector_size) + 1;  -- 1-based
@@ -164,7 +164,7 @@ create or replace package body bloom_filter is
 	begin
 		
 		l_hash := dbms_crypto.hash(utl_raw.cast_to_raw(p_value), dbms_crypto.hash_sh256);
-		-- slice 4 x 4-byte chunks from the 16-byte MD5
+		-- slice num_hashes x 4-byte chunks from the 32-byte SHA-256 digest
 		for i in 0..num_hashes-1 loop
 			l_slice := bitand(utl_raw.cast_to_binary_integer(utl_raw.substr(l_hash, i*4+1, 4)), 2147483647);
 			l_bit_index := mod(l_slice, vector_size) + 1;  -- 1-based
